@@ -185,6 +185,9 @@ class MainActivity : ComponentActivity() {
         sessionStates = sessions.associate { it.speaker.key to it.state }
         sessionVolumes = sessions.associate { it.speaker.key to it.volumePct }
         sessionProtocols = sessions.associate { it.speaker.key to it.protocol }
+        // Keep the "Jump back in" card current the moment a cast starts or
+        // stops, not only when the app is reopened.
+        lastSpeaker = Prefs.lastSpeaker(this)
     }
 
     // ------------------------------------------------------------------

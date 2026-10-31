@@ -23,6 +23,14 @@ object Prefs {
             .putString("last_name", sp.name)
             .putString("last_host", sp.host)
             .putInt("last_port", sp.port)
+            .putString("last_kind", sp.kind.name)
+        // DLNA speakers are rebuilt from their saved control endpoints.
+        val dlna = sp.dlna
+        if (sp.kind == SpeakerKind.DLNA && dlna != null) {
+            e.putString("last_dlna", com.opus.airvia.dlna.DlnaCache.encode(listOf(dlna)))
+        } else {
+            e.remove("last_dlna")
+        }
         // Split-service RAOP endpoint (Kodi/LibreELEC): the reconnect
         // card rebuilds the speaker from these prefs, so the RAOP
         // failover target must be persisted with it (issue #2).
@@ -41,6 +49,12 @@ object Prefs {
             host,
             p.getInt("last_port", 7000),
         )
+        if (p.getString("last_kind", null) == SpeakerKind.DLNA.name) {
+            val dev = com.opus.airvia.dlna.DlnaCache
+                .decode(p.getString("last_dlna", null)).firstOrNull() ?: return null
+            sp.kind = SpeakerKind.DLNA
+            sp.dlna = dev
+        }
         if (p.contains("last_raop_port")) {
             sp.raopPort = p.getInt("last_raop_port", 0).takeIf { it > 0 }
         }

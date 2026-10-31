@@ -97,7 +97,13 @@ fun CastScreen(
 
         if (castState == CastEngine.State.IDLE && lastSpeaker != null) {
             item {
-                ReconnectCard(speaker = lastSpeaker, onCast = { onCast(lastSpeaker) })
+                ReconnectCard(
+                    speaker = lastSpeaker,
+                    roomName = speakers.firstOrNull {
+                        it.host == lastSpeaker.host && it.kind == SpeakerKind.AIRPLAY
+                    }?.name,
+                    onCast = { onCast(lastSpeaker) },
+                )
             }
         }
 
@@ -512,7 +518,7 @@ private fun EmptySpeakersCard(scanning: Boolean) {
 }
 
 @Composable
-private fun ReconnectCard(speaker: Speaker, onCast: () -> Unit) {
+private fun ReconnectCard(speaker: Speaker, roomName: String?, onCast: () -> Unit) {
     Card(
         onClick = onCast,
         modifier = Modifier.fillMaxWidth(),
@@ -534,10 +540,16 @@ private fun ReconnectCard(speaker: Speaker, onCast: () -> Unit) {
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
-                    speaker.name,
+                    if (speaker.kind == SpeakerKind.DLNA) {
+                        SpeakerLabels.dlnaDisplayName(speaker.name, roomName)
+                    } else {
+                        speaker.name
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
+                Spacer(Modifier.height(4.dp))
+                KindBadge(speaker.kind)
             }
             Button(onClick = onCast) { Text("Cast") }
         }

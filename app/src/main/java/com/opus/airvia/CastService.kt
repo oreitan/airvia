@@ -127,8 +127,10 @@ class CastService : Service() {
                 return
             }
         }
-        // Per-speaker memory: last speaker (AirPlay reconnect card).
-        if (speaker.kind == SpeakerKind.AIRPLAY) {
+        // Per-speaker memory: last speaker (reconnect card), AirPlay or DLNA.
+        if (speaker.kind == SpeakerKind.AIRPLAY ||
+            (speaker.kind == SpeakerKind.DLNA && speaker.dlna != null)
+        ) {
             Prefs.saveLastSpeaker(this, speaker)
         }
         // The service can start without MainActivity (QS tile, restart), so
