@@ -115,6 +115,17 @@ object Dlna {
         return found.values.toList()
     }
 
+    /**
+     * Ask a host directly whether it is a Sonos (they always serve their UPnP
+     * description on port 1400). Works even when the speaker ignores SSDP.
+     */
+    fun probeSonos(host: String): DlnaDevice? =
+        describeDevice("http://$host:1400/xml/device_description.xml")
+
+    /** True if the device's description is still served over HTTP. */
+    fun isReachable(device: DlnaDevice): Boolean =
+        httpGet(device.location, 2500) != null
+
     /** Point the renderer at [streamUrl] and start playing it. */
     fun play(device: DlnaDevice, streamUrl: String, title: String) {
         val meta = didlLite(streamUrl, title)

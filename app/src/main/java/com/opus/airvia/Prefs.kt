@@ -57,6 +57,17 @@ object Prefs {
         prefs(ctx).edit().putString("airplay_mode", mode.name).apply()
     }
 
+    // --- Remembered DLNA speakers (Sonos answers SSDP only intermittently) --
+
+    fun dlnaDevices(ctx: Context): List<com.opus.airvia.dlna.Dlna.DlnaDevice> =
+        com.opus.airvia.dlna.DlnaCache.decode(prefs(ctx).getString("dlna_devices", null))
+
+    fun saveDlnaDevices(ctx: Context, devices: List<com.opus.airvia.dlna.Dlna.DlnaDevice>) {
+        prefs(ctx).edit()
+            .putString("dlna_devices", com.opus.airvia.dlna.DlnaCache.encode(devices))
+            .apply()
+    }
+
     // --- EQ ------------------------------------------------------------
 
     fun eqGains(ctx: Context): DoubleArray {

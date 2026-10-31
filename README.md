@@ -27,6 +27,9 @@ What this fork adds:
   names, and a note when one speaker is listed over two protocols
 - **Steadier streaming** — Wi-Fi low-latency and CPU wake locks while casting, plus a
   small start-up buffer for DLNA/Chromecast pulls
+- **Reliable Sonos listing** — speakers found over DLNA are remembered and re-checked
+  directly (port 1400), so a Sonos that ignores multicast search no longer disappears
+- **App search** — search box in the Tune tab's per-app capture picker
 - **Portable build** — macOS and Linux, `scripts/setup_toolchain.sh`, a stable
   signing key, and fixes to the dependency resolver and resource merger
 

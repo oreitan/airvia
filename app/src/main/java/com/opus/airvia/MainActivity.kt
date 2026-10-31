@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import com.opus.airvia.dlna.Dlna
+import com.opus.airvia.dlna.DlnaCache
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
     private var discovery: SpeakerDiscovery? = null
     private var pendingSpeaker: Speaker? = null
     private val dlnaScanRunning = AtomicBoolean(false)
+    private var knownDlna: List<Dlna.DlnaDevice> = emptyList()
     private val castScanRunning = AtomicBoolean(false)
 
     private val recordPermLauncher = registerForActivityResult(
@@ -114,6 +116,14 @@ class MainActivity : ComponentActivity() {
         Prefs.loadEq(this)
         airplayMode = Prefs.airplayMode(this)
         CastEngine.airplayMode = airplayMode
+        knownDlna = Prefs.dlnaDevices(this)
+        dlnaSpeakers = knownDlna.map { dev ->
+            val loc = try { URL(dev.location) } catch (_: Exception) { null }
+            Speaker(dev.name, loc?.host ?: "", loc?.port ?: 80).apply {
+                kind = SpeakerKind.DLNA
+                dlna = dev
+            }
+        }
         eqGains = Prefs.eqGains(this)
         eqPreamp = Prefs.eqPreamp(this)
         selectedApps = Prefs.capturePackages(this)
@@ -185,7 +195,23 @@ class MainActivity : ComponentActivity() {
         if (!dlnaScanRunning.compareAndSet(false, true)) return
         thread(name = "airvia-dlna-scan", isDaemon = true) {
             try {
-                val devices = Dlna.discover(4000, NetUtil.localIp()) { LogBus.log(it) }
+                val ssdp = Dlna.discover(4000, NetUtil.localIp()) { LogBus.log(it) }
+                // Direct check of every AirPlay host: Sonos ignores SSDP at times.
+                val direct = airplaySpeakers.map { it.host }.distinct()
+                    .filter { h -> ssdp.none { it.location.contains("//$h:") } }
+                    .mapNotNull { h -> Dlna.probeSonos(h) }
+                if (direct.isNotEmpty()) {
+                    LogBus.log("[dlna] found by direct probe: ${direct.joinToString { it.name }}")
+                }
+                val found = DlnaCache.merge(ssdp, direct) { false }
+                // Sonos answers SSDP only intermittently: keep remembered
+                // speakers that still respond over HTTP instead of dropping them.
+                val devices = DlnaCache.merge(knownDlna, found) { Dlna.isReachable(it) }
+                if (devices.size > found.size) {
+                    LogBus.log("[dlna] kept ${devices.size - found.size} remembered speaker(s) that did not answer SSDP")
+                }
+                knownDlna = devices
+                Prefs.saveDlnaDevices(this@MainActivity, devices)
                 dlnaSpeakers = devices.map { dev ->
                     val loc = try {
                         URL(dev.location)

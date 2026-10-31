@@ -15,13 +15,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +58,8 @@ fun TuneScreen(
     onToggleApp: (String, Boolean) -> Unit,
     onCaptureAllApps: () -> Unit,
 ) {
+    var appQuery by rememberSaveable { mutableStateOf("") }
+    val shownApps = apps.filter { AppSearch.matches(it.label, it.packageName, appQuery) }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -225,7 +237,36 @@ fun TuneScreen(
                 }
             }
         }
-        items(apps, key = { it.packageName }) { app ->
+        item {
+            OutlinedTextField(
+                value = appQuery,
+                onValueChange = { appQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Search apps") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Search, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (appQuery.isNotEmpty()) {
+                        IconButton(onClick = { appQuery = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                        }
+                    }
+                },
+            )
+        }
+        if (shownApps.isEmpty()) {
+            item {
+                Text(
+                    if (apps.isEmpty()) "No apps found." else "No apps match \"${appQuery.trim()}\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+        }
+        items(shownApps, key = { it.packageName }) { app ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
