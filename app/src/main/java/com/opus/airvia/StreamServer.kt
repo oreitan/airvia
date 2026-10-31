@@ -18,6 +18,9 @@ class StreamServer(private val broadcast: BroadcastCapture) {
     companion object {
         const val PORT = 8899
         const val PATH = "/stream.wav"
+
+        /** Silence sent up front so the renderer builds a jitter cushion. */
+        const val PREROLL_MS = 2000
     }
 
     @Volatile
@@ -55,6 +58,7 @@ class StreamServer(private val broadcast: BroadcastCapture) {
     private fun serve(client: Socket) {
         try {
             client.tcpNoDelay = true
+            try { client.sendBufferSize = 256 * 1024 } catch (_: Exception) {}
             // Consume the request headers before replying.
             val input = client.getInputStream()
             val raw = java.io.ByteArrayOutputStream()
@@ -83,10 +87,22 @@ class StreamServer(private val broadcast: BroadcastCapture) {
             }
             out.write(httpHeaders().toByteArray(Charsets.US_ASCII))
             out.write(wavHeader())
+            // Pre-roll: a burst of silence ahead of the live audio gives the
+            // renderer a few seconds of buffer, so Wi-Fi jitter doesn't run it dry.
+            val silence = ByteArray(44100 * 2 * 2 * PREROLL_MS / 1000)
+            out.write(silence)
             out.flush()
+            val t0 = System.currentTimeMillis()
             streamAudio(out)
-        } catch (_: Exception) {
-            // client went away
+            LogBus.log(
+                "[http] stream to ${client.inetAddress?.hostAddress} ended after " +
+                    "${(System.currentTimeMillis() - t0) / 1000}s",
+            )
+        } catch (e: Exception) {
+            LogBus.log(
+                "[http] client ${client.inetAddress?.hostAddress} went away: " +
+                    "${e.javaClass.simpleName} ${e.message ?: ""}",
+            )
         } finally {
             synchronized(clients) { clients.remove(client) }
             try { client.close() } catch (_: Exception) {}

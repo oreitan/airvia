@@ -73,6 +73,8 @@ class CastService : Service() {
     private var streamServer: StreamServer? = null
     private var watcher: NowPlayingWatcher? = null
     private var shuttingDown = false
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     private val engineListener: (CastEngine.State) -> Unit = {
         updateNotification()
@@ -176,6 +178,8 @@ class CastService : Service() {
         server.start()
         streamServer = server
 
+        acquireNetworkLocks()
+
         VolumeKeys.init(this)
         VolumeKeys.stopHandler = {
             CastEngine.stopAll()
@@ -269,6 +273,41 @@ class CastService : Service() {
         }
     }
 
+    /**
+     * Keep Wi-Fi out of power-save and the CPU awake while casting, so the
+     * stream isn't throttled when the screen turns off (symptom: audio keeps
+     * cutting out on speakers that pull the stream, e.g. Sonos over DLNA).
+     */
+    private fun acquireNetworkLocks() {
+        try {
+            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE)
+                as android.net.wifi.WifiManager
+            wifiLock = wifi.createWifiLock(
+                android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "airvia-cast",
+            ).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            wakeLock = pm.newWakeLock(
+                android.os.PowerManager.PARTIAL_WAKE_LOCK, "airvia:cast",
+            ).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            LogBus.log("[service] Wi-Fi low-latency lock + CPU wake lock held while casting")
+        } catch (e: Exception) {
+            LogBus.log("[service] could not take Wi-Fi/wake lock: ${e.message}")
+        }
+    }
+
+    private fun releaseNetworkLocks() {
+        try { wifiLock?.takeIf { it.isHeld }?.release() } catch (_: Exception) {}
+        try { wakeLock?.takeIf { it.isHeld }?.release() } catch (_: Exception) {}
+        wifiLock = null
+        wakeLock = null
+    }
+
     private fun teardownCast() {
         try {
             CastEngine.removeListener(engineListener)
@@ -303,6 +342,7 @@ class CastService : Service() {
         } catch (_: Exception) {
         }
         projection = null
+        releaseNetworkLocks()
         PhoneSilencer.release(this)
         VolumeKeys.stopHandler = null
         VolumeKeys.setCasting(false)

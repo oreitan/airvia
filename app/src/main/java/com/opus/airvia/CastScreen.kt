@@ -126,6 +126,9 @@ fun CastScreen(
                 val sState = sessionStates[sp.key]
                 SpeakerCard(
                     speaker = sp,
+                    twin = speakers.firstOrNull {
+                        it !== sp && it.host == sp.host && it.kind != sp.kind
+                    },
                     active = sState == CastEngine.State.STREAMING ||
                         sState == CastEngine.State.CONNECTING,
                     connecting = sState == CastEngine.State.CONNECTING,
@@ -321,6 +324,7 @@ private fun EqualizerBars() {
 @Composable
 private fun SpeakerCard(
     speaker: Speaker,
+    twin: Speaker?,
     active: Boolean,
     connecting: Boolean,
     volumePct: Int,
@@ -361,19 +365,47 @@ private fun SpeakerCard(
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        speaker.name,
+                        if (speaker.kind == SpeakerKind.DLNA) {
+                            SpeakerLabels.dlnaDisplayName(
+                                speaker.name,
+                                twin?.takeIf { it.kind == SpeakerKind.AIRPLAY }?.name,
+                            )
+                        } else {
+                            speaker.name
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                     )
-                    Text(
-                        when (speaker.kind) {
-                            SpeakerKind.AIRPLAY -> "${speaker.host}:${speaker.port}"
-                            SpeakerKind.DLNA -> "DLNA / Sonos"
-                            SpeakerKind.CHROMECAST -> "Chromecast"
-                        } + if (active && !protocol.isNullOrEmpty()) " · $protocol" else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        KindBadge(speaker.kind)
+                        if (active && !protocol.isNullOrEmpty()) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                protocol,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            speaker.host + if (speaker.kind == SpeakerKind.AIRPLAY) ":${speaker.port}" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (twin != null && !active) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            when (speaker.kind) {
+                                SpeakerKind.DLNA -> "Same speaker as the AirPlay entry"
+                                SpeakerKind.AIRPLAY -> "Also available over DLNA"
+                                SpeakerKind.CHROMECAST -> ""
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 when {
                     connecting -> CircularProgressIndicator(
@@ -410,6 +442,30 @@ private fun SpeakerCard(
                 }
             }
         }
+    }
+}
+
+/** Small coloured pill that says which sender stack a speaker uses. */
+@Composable
+private fun KindBadge(kind: SpeakerKind) {
+    val scheme = MaterialTheme.colorScheme
+    val (label, bg, fg) = when (kind) {
+        SpeakerKind.AIRPLAY -> Triple("AirPlay", scheme.secondaryContainer, scheme.onSecondaryContainer)
+        SpeakerKind.DLNA -> Triple("DLNA · Sonos", scheme.tertiaryContainer, scheme.onTertiaryContainer)
+        SpeakerKind.CHROMECAST -> Triple("Chromecast", scheme.surface, scheme.onSurface)
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = fg,
+        )
     }
 }
 
@@ -572,7 +628,7 @@ private fun AirPlayModeCard(
                         "AirPlay 2 only (HomePod, newer receivers). No fallback."
                     AirPlayMode.AIRPLAY1 ->
                         "Classic AirPlay 1 / RAOP only (older receivers, Kodi, shairport)."
-                } + " Applies to the next cast.",
+                } + " Applies to the next cast, and to AirPlay speakers only (DLNA / Sonos entries ignore it).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

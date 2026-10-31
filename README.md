@@ -23,6 +23,10 @@ What this fork adds:
 - **Sonos fix** — Sonos speakers are found over DLNA/UPnP again (the manifest
   was blocking the plain-HTTP requests they need); newer Sonos such as the
   Beam accept AirPlay 2 pairing but stay silent, so use the "DLNA / Sonos" entry
+- **Clearer speaker list** — AirPlay / DLNA · Sonos / Chromecast badges, tidy Sonos
+  names, and a note when one speaker is listed over two protocols
+- **Steadier streaming** — Wi-Fi low-latency and CPU wake locks while casting, plus a
+  small start-up buffer for DLNA/Chromecast pulls
 - **Portable build** — macOS and Linux, `scripts/setup_toolchain.sh`, a stable
   signing key, and fixes to the dependency resolver and resource merger
 
