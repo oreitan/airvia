@@ -44,11 +44,29 @@ object Dlna {
      * Multicast M-SEARCH for MediaRenderers (and Sonos ZonePlayers).
      * Returns one entry per distinct device (deduped by UDN).
      */
-    fun discover(timeoutMs: Int = 5000): List<DlnaDevice> {
+    fun discover(
+        timeoutMs: Int = 5000,
+        localIp: String? = null,
+        log: (String) -> Unit = {},
+    ): List<DlnaDevice> {
         val found = linkedMapOf<String, DlnaDevice>()
         var socket: MulticastSocket? = null
+        var replies = 0
         try {
             socket = MulticastSocket()
+            // Send out of the Wi-Fi interface: on phones with mobile data the
+            // default multicast route can be the wrong network.
+            val iface = localIp?.let {
+                try {
+                    java.net.NetworkInterface.getByInetAddress(InetAddress.getByName(it))
+                } catch (_: Exception) { null }
+            }
+            if (iface != null) {
+                try { socket.networkInterface = iface } catch (e: Exception) {
+                    log("[dlna] could not bind SSDP to ${iface.name}: ${e.message}")
+                }
+            }
+            log("[dlna] SSDP search via ${iface?.name ?: "default interface"}")
             socket.soTimeout = 800
             val group = InetAddress.getByName(SSDP_ADDR)
             val targets = listOf(MEDIA_RENDERER_ST, ZONE_PLAYER_ST)
@@ -73,16 +91,24 @@ object Dlna {
                     val location = parseSsdpLocation(
                         recv.data.decodeToString(0, recv.length),
                     ) ?: continue
+                    replies++
                     if (found.values.any { it.location == location }) continue
-                    val device = describeDevice(location) ?: continue
+                    val device = describeDevice(location)
+                    if (device == null) {
+                        log("[dlna] reply from $location but device description failed")
+                        continue
+                    }
                     found.putIfAbsent(device.udn, device)
                 } catch (_: java.net.SocketTimeoutException) {
                     // keep waiting until the deadline
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    log("[dlna] receive error: ${e.message}")
                     break
                 }
             }
-        } catch (_: Exception) {
+            log("[dlna] SSDP done: $replies replies, ${found.size} devices")
+        } catch (e: Exception) {
+            log("[dlna] SSDP failed: ${e.message}")
         } finally {
             try { socket?.close() } catch (_: Exception) {}
         }

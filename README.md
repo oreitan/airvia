@@ -20,6 +20,9 @@ What this fork adds:
   casts started from the Quick Settings tile
 - **Modern toolchain** — Android SDK 36, Kotlin 2.4.21, Compose BOM 2026.09.00
   and current AndroidX libraries
+- **Sonos fix** — Sonos speakers are found over DLNA/UPnP again (the manifest
+  was blocking the plain-HTTP requests they need); newer Sonos such as the
+  Beam accept AirPlay 2 pairing but stay silent, so use the "DLNA / Sonos" entry
 - **Portable build** — macOS and Linux, `scripts/setup_toolchain.sh`, a stable
   signing key, and fixes to the dependency resolver and resource merger
 

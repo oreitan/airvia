@@ -26,6 +26,17 @@ REPOS = [GOOGLE, CENTRAL]
 NS = {"m": "http://maven.apache.org/POM/4.0.0"}
 
 LIFECYCLE_VERSION = "2.11.0"
+SAVEDSTATE_VERSION = "1.5.0"
+
+# Kotlin-multiplatform splits: the bare artifact is an empty stub and the real
+# classes live in the -android twin (Gradle follows module metadata; this
+# resolver does not). base -> (twin artifact, twin version).
+KMP_ANDROID_TWINS = {
+    ("androidx.lifecycle", "lifecycle-viewmodel-savedstate"):
+        ("lifecycle-viewmodel-savedstate-android", LIFECYCLE_VERSION),
+    ("androidx.savedstate", "savedstate"):
+        ("savedstate-android", SAVEDSTATE_VERSION),
+}
 
 # Artifacts folded into another artifact in newer releases.
 MERGED_INTO_NEWER = {
@@ -435,6 +446,18 @@ def main():
             log(f"Evicting obsolete {_old[0]}:{_old[1]} (superseded by lifecycle-viewmodel-android)")
             del chosen[_old]
     chosen[("androidx.lifecycle", "lifecycle-viewmodel-android")] = LIFECYCLE_VERSION
+
+    # 3c2. Swap KMP stubs for their -android twins, and keep savedstate on one
+    # version (lifecycle 2.11 needs the new savedstate; an old 1.2.x would
+    # duplicate/clash with it).
+    for (g, a), (twin, ver) in KMP_ANDROID_TWINS.items():
+        if (g, a) in chosen:
+            log(f"Replacing KMP stub {g}:{a} with {twin}:{ver}")
+            del chosen[(g, a)]
+            chosen[(g, twin)] = ver
+    for (g, a) in list(chosen):
+        if g == "androidx.savedstate":
+            chosen[(g, a)] = SAVEDSTATE_VERSION
 
     # 3d. Repair versions stomped by the Cast SDK subtree's stale floor versions.
     # play-services-cast-framework:21.4.0 declares androidx.appcompat:appcompat:1.0.0

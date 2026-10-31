@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
         if (!dlnaScanRunning.compareAndSet(false, true)) return
         thread(name = "airvia-dlna-scan", isDaemon = true) {
             try {
-                val devices = Dlna.discover(4000)
+                val devices = Dlna.discover(4000, NetUtil.localIp()) { LogBus.log(it) }
                 dlnaSpeakers = devices.map { dev ->
                     val loc = try {
                         URL(dev.location)

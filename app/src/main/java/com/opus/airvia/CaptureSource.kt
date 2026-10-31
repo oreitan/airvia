@@ -87,6 +87,10 @@ class CaptureSource(
 
     private fun readLoop(rec: AudioRecord) {
         val buf = ShortArray(1920) // 960 frames = 20 ms at 48 kHz
+        // Diagnostics: loudest raw sample per ~3 s, so a silent capture
+        // (app blocks capture / OEM quirk) is visible in the log.
+        var peak = 0
+        var windowStart = System.currentTimeMillis()
         while (!finished) {
             val n = try {
                 rec.read(buf, 0, buf.size)
@@ -98,6 +102,19 @@ class CaptureSource(
                 break
             }
             if (n == 0) continue
+            for (i in 0 until n) {
+                val a = kotlin.math.abs(buf[i].toInt())
+                if (a > peak) peak = a
+            }
+            val now = System.currentTimeMillis()
+            if (now - windowStart >= 3000) {
+                LogBus.log(
+                    "[capture] level: peak=$peak/32767" +
+                        if (peak == 0) " (SILENT — nothing captured)" else "",
+                )
+                peak = 0
+                windowStart = now
+            }
             val out = resampler.push(buf.copyOf(n))
             if (out.isNotEmpty()) {
                 Eq.processor.process(out)

@@ -21,7 +21,11 @@ import androidx.compose.ui.res.painterResource
 private fun drawableId(name: String): Int {
     val ctx = LocalContext.current
     return remember(name) {
+        // Resources keep the original package even when the APK is built with
+        // a different applicationId (side-by-side fork build), so fall back.
         ctx.resources.getIdentifier(name, "drawable", ctx.packageName)
+            .takeIf { it != 0 }
+            ?: ctx.resources.getIdentifier(name, "drawable", "com.opus.airvia")
     }
 }
 

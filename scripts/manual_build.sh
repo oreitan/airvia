@@ -319,7 +319,7 @@ $BUILD_TOOLS/aapt2 link \
   -I $PLATFORM \
   --manifest $PROJECT/app/src/main/AndroidManifest.xml \
   --java $BUILD/r-src \
-  --rename-manifest-package com.opus.airvia \
+  --rename-manifest-package "${AIRVIA_APP_ID:-com.opus.airvia}" \
   --min-sdk-version 29 \
   --target-sdk-version 36 \
   --version-code 9 \
