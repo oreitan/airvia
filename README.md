@@ -8,6 +8,21 @@ with the modern transient-pairing handshake current HomePods require.
 
 Free and open source. No trial, no added noise, no account, no ads.
 
+## About this fork
+
+This is [oreitan/airvia](https://github.com/oreitan/airvia), maintained by
+**oreitan**, a fork of [jazzy1133/airvia](https://github.com/jazzy1133/airvia).
+
+What this fork adds:
+
+- **AirPlay protocol selector** — choose Auto, AirPlay 2 only, or AirPlay 1
+  (RAOP) only from the Cast tab; the choice is remembered, including for
+  casts started from the Quick Settings tile
+- **Modern toolchain** — Android SDK 36, Kotlin 2.4.21, Compose BOM 2026.09.00
+  and current AndroidX libraries
+- **Portable build** — macOS and Linux, `scripts/setup_toolchain.sh`, a stable
+  signing key, and fixes to the dependency resolver and resource merger
+
 ## Why Airvia?
 
 Android-to-speaker casting apps have been around for years, but:
@@ -126,6 +141,15 @@ Airvia collects no personal data — no account, no ads, no analytics, no
 crash reporting. Your audio stays on your own Wi-Fi network. See the
 full [Privacy Policy](PRIVACY.md).
 
+## Credits
+
+- **oreitan** — maintainer of this fork; AirPlay 1/2 selector, toolchain
+  and build updates.
+- **jazzy1133** — original author of Airvia, including the AirPlay 2 / RAOP
+  sender stack, casting engine and UI that this fork builds on.
+  Original project: <https://github.com/jazzy1133/airvia>.
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Copyright is held by the original author and
+by the fork's contributors; both notices must be kept.
