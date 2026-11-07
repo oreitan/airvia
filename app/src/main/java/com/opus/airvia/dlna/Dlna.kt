@@ -4,7 +4,11 @@ import java.io.ByteArrayOutputStream
 import java.net.DatagramPacket
 import java.net.HttpURLConnection
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.MulticastSocket
+import java.net.Socket
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.net.URL
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -121,6 +125,39 @@ object Dlna {
      */
     fun probeSonos(host: String): DlnaDevice? =
         describeDevice("http://$host:1400/xml/device_description.xml")
+
+    /**
+     * Last-resort discovery: try TCP port 1400 (Sonos' UPnP port) on every
+     * host of the local subnet. The 1.5 s connect timeout matters: on busy
+     * Wi-Fi a Sonos often needs >0.6 s to answer 48 simultaneous probes. Needs no multicast at all, so it finds a
+     * Sonos that ignores SSDP and isn't advertised over AirPlay either.
+     */
+    fun sweepSonos(
+        hosts: List<String>,
+        log: (String) -> Unit = {},
+    ): List<DlnaDevice> {
+        if (hosts.isEmpty()) return emptyList()
+        val pool = Executors.newFixedThreadPool(48)
+        try {
+            val futures = hosts.map { h ->
+                pool.submit<DlnaDevice?> {
+                    val open = try {
+                        Socket().use { it.connect(InetSocketAddress(h, 1400), 1500); true }
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (open) probeSonos(h) else null
+                }
+            }
+            val out = futures.mapNotNull {
+                try { it.get(45, TimeUnit.SECONDS) } catch (_: Exception) { null }
+            }
+            log("[dlna] subnet sweep of ${hosts.size} hosts: ${out.size} Sonos found")
+            return out
+        } finally {
+            pool.shutdownNow()
+        }
+    }
 
     /** True if the device's description is still served over HTTP. */
     fun isReachable(device: DlnaDevice): Boolean =

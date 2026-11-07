@@ -117,19 +117,14 @@ class MainActivity : ComponentActivity() {
         airplayMode = Prefs.airplayMode(this)
         CastEngine.airplayMode = airplayMode
         knownDlna = Prefs.dlnaDevices(this)
-        dlnaSpeakers = knownDlna.map { dev ->
-            val loc = try { URL(dev.location) } catch (_: Exception) { null }
-            Speaker(dev.name, loc?.host ?: "", loc?.port ?: 80).apply {
-                kind = SpeakerKind.DLNA
-                dlna = dev
-            }
-        }
+        dlnaSpeakers = knownDlna.map { dlnaSpeaker(it) }
         eqGains = Prefs.eqGains(this)
         eqPreamp = Prefs.eqPreamp(this)
         selectedApps = Prefs.capturePackages(this)
         CastEngine.addListener(engineListener)
         discovery = SpeakerDiscovery(this) { found ->
             airplaySpeakers = found
+            probeNewAirplayHosts(found)
         }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
@@ -194,12 +189,64 @@ class MainActivity : ComponentActivity() {
     // Extra discovery: DLNA (SSDP) + Chromecast (Cast SDK, if present)
     // ------------------------------------------------------------------
 
-    private fun runDlnaScan() {
+    private val dlnaLock = Any()
+    private val probedHosts = HashSet<String>()
+    private var lastSweepAt = 0L
+
+    private fun dlnaSpeaker(dev: Dlna.DlnaDevice): Speaker {
+        val loc = try { URL(dev.location) } catch (_: Exception) { null }
+        return Speaker(dev.name, loc?.host ?: "", loc?.port ?: 80).apply {
+            kind = SpeakerKind.DLNA
+            dlna = dev
+        }
+    }
+
+    /** Make [devices] the DLNA speaker list and remember them. */
+    private fun publishDlna(devices: List<Dlna.DlnaDevice>) {
+        synchronized(dlnaLock) {
+            knownDlna = devices
+            Prefs.saveDlnaDevices(this, devices)
+            dlnaSpeakers = devices.map { dlnaSpeaker(it) }
+        }
+    }
+
+    /** Add newly found devices without dropping anything already listed. */
+    private fun addDlna(devices: List<Dlna.DlnaDevice>) {
+        if (devices.isEmpty()) return
+        synchronized(dlnaLock) {
+            publishDlna(DlnaCache.merge(knownDlna, devices) { true })
+        }
+    }
+
+    /**
+     * AirPlay discovery finishes after the first DLNA scan starts, so probe
+     * each AirPlay host for a Sonos the moment it shows up.
+     */
+    private fun probeNewAirplayHosts(found: List<Speaker>) {
+        val hosts = found.map { it.host }.distinct()
+            .filter { h -> h.isNotEmpty() && synchronized(dlnaLock) { probedHosts.add(h) } }
+        if (hosts.isEmpty()) return
+        thread(name = "airvia-sonos-probe", isDaemon = true) {
+            val devs = hosts.mapNotNull { Dlna.probeSonos(it) }
+            if (devs.isNotEmpty()) {
+                LogBus.log("[dlna] found by direct probe: ${devs.joinToString { it.name }}")
+                addDlna(devs)
+            }
+        }
+    }
+
+    /**
+     * Find DLNA/Sonos speakers by every route, so one flaky method can't hide
+     * them: SSDP multicast, a direct check of each AirPlay host, remembered
+     * speakers that still answer, and (when nothing is known, or [force]) a
+     * sweep of the whole subnet for port 1400.
+     */
+    private fun runDlnaScan(force: Boolean = false) {
         if (!dlnaScanRunning.compareAndSet(false, true)) return
         thread(name = "airvia-dlna-scan", isDaemon = true) {
             try {
-                val ssdp = Dlna.discover(4000, NetUtil.localIp()) { LogBus.log(it) }
-                // Direct check of every AirPlay host: Sonos ignores SSDP at times.
+                val ip = NetUtil.localIp()
+                val ssdp = Dlna.discover(4000, ip) { LogBus.log(it) }
                 val direct = airplaySpeakers.map { it.host }.distinct()
                     .filter { h -> ssdp.none { it.location.contains("//$h:") } }
                     .mapNotNull { h -> Dlna.probeSonos(h) }
@@ -207,29 +254,16 @@ class MainActivity : ComponentActivity() {
                     LogBus.log("[dlna] found by direct probe: ${direct.joinToString { it.name }}")
                 }
                 val found = DlnaCache.merge(ssdp, direct) { false }
-                // Sonos answers SSDP only intermittently: keep remembered
-                // speakers that still respond over HTTP instead of dropping them.
-                val devices = DlnaCache.merge(knownDlna, found) { Dlna.isReachable(it) }
-                if (devices.size > found.size) {
-                    LogBus.log("[dlna] kept ${devices.size - found.size} remembered speaker(s) that did not answer SSDP")
+                var devices = DlnaCache.merge(knownDlna, found) { Dlna.isReachable(it) }
+                val now = System.currentTimeMillis()
+                if (force || (devices.isEmpty() && now - lastSweepAt > 5 * 60_000L)) {
+                    lastSweepAt = now
+                    val sweep = Dlna.sweepSonos(
+                        NetUtil.subnetHosts(ip, NetUtil.localPrefix(ip)),
+                    ) { LogBus.log(it) }
+                    devices = DlnaCache.merge(devices, sweep) { true }
                 }
-                knownDlna = devices
-                Prefs.saveDlnaDevices(this@MainActivity, devices)
-                dlnaSpeakers = devices.map { dev ->
-                    val loc = try {
-                        URL(dev.location)
-                    } catch (_: Exception) {
-                        null
-                    }
-                    Speaker(
-                        dev.name,
-                        loc?.host ?: "",
-                        loc?.port ?: 80,
-                    ).apply {
-                        kind = SpeakerKind.DLNA
-                        dlna = dev
-                    }
-                }
+                publishDlna(devices)
                 if (devices.isNotEmpty()) {
                     LogBus.log("[discover] DLNA: ${devices.joinToString { it.name }}")
                 }
@@ -361,7 +395,7 @@ class MainActivity : ComponentActivity() {
                         onRescan = {
                             discovery?.stop()
                             discovery?.start()
-                            runDlnaScan()
+                            runDlnaScan(force = true)
                             runCastScan()
                             LogBus.log("[ui] rescan")
                         },
